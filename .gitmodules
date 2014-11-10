@@ -1,0 +1,3 @@
+[submodule "Sampling"]
+	path = Sampling
+	url = https://github.com/BanTheRewind/Sampling.git
