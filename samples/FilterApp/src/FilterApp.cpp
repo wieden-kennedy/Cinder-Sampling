@@ -41,6 +41,17 @@
 
 #include "Sampling.h"
 
+/*
+ * This app demonstrates how to use Sampling to apply a 
+ * variety of smoothing algorithms without the need for 
+ * classes or cumbersome setup.
+ * 
+ * This sample was inspired by Jonathan Aceituno's 1euro 
+ * demo. The colors were lifted from the his demo, but the 
+ * filter implementations were not.
+ * http://www.lifl.fr/~casiez/1euro/InteractiveDemo/
+ */
+
 enum : size_t
 {
 	FilterType_None,
@@ -141,7 +152,7 @@ void FilterApp::draw()
 			const vector<float>& signal	= mOutput.at( iter.first );
 			size_t numSamples			= signal.size();
 			if ( numSamples > 0 ) {
-				float d = x / (float)numSamples;
+				float d = x / (float)( mNumSamples - 1 );
 				for ( size_t i = 0; i < numSamples; ++i, x -= d ) {
 					float y = signal.at( i ) * h * 0.5f + h;
 					gl::vertex( x, y );
@@ -170,7 +181,7 @@ void FilterApp::setup()
 	mFrameRate							= 60.0f;
 	mKalmanMeasurementErrorCovariance	= 0.617f;
 	mKalmanProcessErrorCovariance		= 0.03f;
-	mMovingAverageWindowSize			= 14.0f;
+	mMovingAverageWindowSize			= 14;
 	mNumSamples							= 256;
 	mOneEuroCutoffSlope					= 0.007f;
 	mOneEuroMinimumCutoff				= 1.0f;
@@ -180,7 +191,7 @@ void FilterApp::setup()
 	mSignalNoise						= 0.2f;
 	
 	// Set up filters. By using lamdba methods with size_t keys,
-	// we can just slam in filter logic without setting up a lot of
+	// we can just slam in filter logic without setting up 
 	// classes or buffering routines.
 	for ( size_t i = 0; i < (size_t)FilterType_Count; ++i ) {
 		mOutput[ i ]	= {};
@@ -212,17 +223,19 @@ void FilterApp::setup()
 				//				for smoother, but slower, filtering
 				mInput.setProcess( i, [ & ]() -> float
 				{
-					static float v = 0.0f;
-					
 					float f = 0.0f;
 					if ( !mInput.getSamples().empty() ) {
+						static float v = 0.0f;
+
 						const vector<float>& signal = mOutput.at( (size_t)FilterType_ExponentialSingle );
-						
-						float single	= signal.empty() ? 0.0f : signal.back();
+						if ( !signal.empty() ) {
+							f = signal.back();
+						}
+
 						float invAlpha	= 1.0f - mAlphaExponentialSingle;
-						v				= mAlphaExponentialSingle * single + invAlpha * v;
-						float a			= 2.0f * single - v;
-						float b			= ( mAlphaExponentialSingle / invAlpha ) * ( single - v );
+						v				= mAlphaExponentialSingle * f + invAlpha * v;
+						float a			= 2.0f * f - v;
+						float b			= ( mAlphaExponentialSingle / invAlpha ) * ( f - v );
 						f				= a + b;
 					}
 					return f;
@@ -237,7 +250,9 @@ void FilterApp::setup()
 					if ( !mInput.getSamples().empty() ) {
 						const vector<float>& signal = mOutput.at( (size_t)FilterType_ExponentialSingle );
 						
-						f = signal.empty() ? 0.0f : signal.back();
+						if ( !signal.empty() ) {
+							f = signal.back();
+						}
 						f = mAlphaExponentialSingle * mInput.getSamples().back() + ( 1.0f - mAlphaExponentialSingle ) * f;
 					}
 					return f;
@@ -245,16 +260,18 @@ void FilterApp::setup()
 				break;
 			case FilterType_Kalman:
 				
-				// KALMAN: Simple Kalman uses input as control vector
+				// KALMAN: Simple Kalman filter uses input as control vector
 				mInput.setProcess( i, [ & ]() -> float
 				{
-					static float estimateProbability = 0.0f;
-					
 					float f = 0.0f;
 					if ( !mInput.getSamples().empty() ) {
+						static float estimateProbability = 0.0f;
+
 						const vector<float>& signal = mOutput.at( (size_t)FilterType_Kalman );
-						
-						f					= signal.empty() ? 0.0f : signal.back();
+						if ( !signal.empty() ) {
+							f = signal.back();
+						}
+
 						float v				= mInput.getSamples().back();
 						float p				= estimateProbability + mKalmanProcessErrorCovariance;
 						float kalmanGain	= p * ( 1.0f / (p + mKalmanMeasurementErrorCovariance ) );
@@ -283,31 +300,30 @@ void FilterApp::setup()
 				break;
 			case FilterType_OneEuro:
 				
-				// ONE EURO: Classless implemenetation
+				// ONE EURO: Classless implemenetation of the One Euro filter
 				mInput.setProcess( i, [ & ]() -> float
 				{
-					function<float( float )> getAlpha = [ & ]( float cutoff )
-					{
-						float te	= 1.0f / mFrameRate;
-						float tau	= 1.0f / ( 2.0f * (float)M_PI * cutoff );
-						return 1.0f / ( 1.0f + tau / te );
-					};
-					
-					static float value				= 0.0f;
-					static float valueDerivative	= 0.0f;
-					static float valueRaw			= 0.0f;
-					
 					float f = 0.0f;
 					if ( !mInput.getSamples().empty() ) {
-						float v					= mInput.getSamples().back();
-						float m					= v < 0.0f ? -1.0f : 1.0f;
-						v						= abs( v );
-						float d					= ( v - valueRaw ) * mFrameRate;
-						valueRaw				= v;
-						float alphaDerivative	= getAlpha( mOneEuroCutoffForDerivative );
+						static float value				= 0.0f;
+						static float valueDerivative	= 0.0f;
+						static float valueRaw			= 0.0f;
+						
+						function<float( float, float )> getAlpha = []( float cutoff, float step )
+						{
+							return 1.0f / ( 1.0f + ( 1.0f / ( 2.0f * (float)M_PI * cutoff ) ) / step );
+						};
+					
+						f						= mInput.getSamples().back();
+						float m					= f < 0.0f ? -1.0f : 1.0f;
+						f						= abs( f );
+						float d					= ( f - valueRaw ) * mFrameRate;
+						valueRaw				= f;
+						float step				= 1.0f / mFrameRate;
+						float alphaDerivative	= getAlpha( mOneEuroCutoffForDerivative, step );
 						valueDerivative			= alphaDerivative * d + ( 1.0f - alphaDerivative ) * valueDerivative;
-						float alpha				= getAlpha( mOneEuroMinimumCutoff + mOneEuroCutoffSlope * fabs( valueDerivative ) );
-						value					= alpha * v + ( 1.0f - alpha ) * value;
+						float alpha				= getAlpha( mOneEuroMinimumCutoff + mOneEuroCutoffSlope * fabs( valueDerivative ), step );
+						value					= alpha * f + ( 1.0f - alpha ) * value;
 						f						= value * m;
 					}
 					return f;
@@ -319,7 +335,7 @@ void FilterApp::setup()
 	}
 	
 	// Set up the parameters window
-	mParams = params::InterfaceGl::create( "Params", ivec2( 300, 500 ) );
+	mParams = params::InterfaceGl::create( "Params", ivec2( 300, 450 ) );
 	mParams->addParam( "Frame rate",	&mFrameRate,			"", true );
 	mParams->addButton( "Quit",			[ & ]() { quit(); },	"key=q" );
 	
