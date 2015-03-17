@@ -1,7 +1,7 @@
 
 /*
  *
- * Copyright (c) 2014, Wieden+Kennedy
+ * Copyright (c) 2015, Wieden+Kennedy
  * Stephen Schieberl
  * All rights reserved.
  *
@@ -36,7 +36,7 @@
  * 
  */
 
-#include "cinder/app/AppNative.h"
+#include "cinder/app/App.h"
 #include "cinder/params/Params.h"
 
 #include "Sampling.h"
@@ -67,13 +67,12 @@ enum : size_t
 typedef std::map<size_t, std::function<float()> >	ProcessMap;
 typedef sampling::SamplerT<float, float>			Sampler;
 
-class FilterApp : public ci::app::AppNative
+class FilterApp : public ci::app::App
 {
 public:
-	void						draw();
-	void						prepareSettings( ci::app::AppNative::Settings* settings );
-	void						setup();
-	void						update();
+	void						draw() override;
+	void						setup() override;
+	void						update() override;
 private:
 	typedef std::map<size_t, std::vector<float> > SignalMap;
 	
@@ -163,12 +162,6 @@ void FilterApp::draw()
 	}
 	
 	mParams->draw();
-}
-
-void FilterApp::prepareSettings( Settings* settings )
-{
-	settings->disableFrameRate();
-	settings->setWindowSize( 1280, 720 );
 }
 
 void FilterApp::setup()
@@ -394,4 +387,8 @@ void FilterApp::update()
 	}
 }
 
-CINDER_APP_NATIVE( FilterApp, RendererGl )
+CINDER_APP( FilterApp, RendererGl, []( App::Settings* settings )
+{
+	settings->disableFrameRate();
+	settings->setWindowSize( 1280, 720 );
+} )
