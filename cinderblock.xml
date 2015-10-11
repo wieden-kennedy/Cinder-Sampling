@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<cinder>
+<block
+    name="Sampling"
+    id="com.wk.cinder-sampling"
+    git="https://github.com/wieden-kennedy/Cinder-Sampling.git"
+    author="Stephen Schieberl"
+    summary="Flexible and easy way to capture and process data in C++"
+    url="https://github.com/wieden-kennedy/Cinder-Sampling"
+    >
+    <header>Sampling/Sampling.h</header>
+    <copyExclude>samples</copyExclude>
+</block>
+</cinder>
